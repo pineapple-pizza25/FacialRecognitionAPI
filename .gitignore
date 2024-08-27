@@ -1,0 +1,19 @@
+.env
+
+*.log
+
+# Distribution / packaging
+.Python
+myenv/
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
