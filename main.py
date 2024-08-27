@@ -2,10 +2,15 @@ from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from deepface import DeepFace
 import os
+from motor.motor_asyncio import AsyncIOMotorClient
+from pymongo import MongoClient
+import bson.binary
 
 app = FastAPI()
 
-origins = ["https://localhost:3000"]
+client = MongoClient("mongodb://localhost:27017/")
+db = client['facial_recognition']
+collection = db['images']
 
 app.add_middleware(
     CORSMiddleware,
@@ -15,24 +20,32 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+
 @app.get("/")
 def getImage():
-    img_path = "face_image.jpg"
+    return {"Welcome"}
 
+@app.post("/storeface")
+def storeImageEmbedding(img_path: str = "face_image.jpg"):
     #img = functions.preprocess_face(img_path, target_size=(224, 224))
 
-    flag = False
+    if not os.path.exists(img_path):
+        raise HTTPException(status_code=404, detail="Image file not found")
+    
 
-    if os.path.exists(img_path):
-        flag = True
-    else:
-        flag = False
+    try:
+        embedding = DeepFace.represent(img_path, model_name = "Facenet")
 
-    if flag==True:
-        try:
-            embedding = DeepFace.represent(img_path, model_name = "Facenet")
-            return {"embedding": embedding}
-        except Exception as e:
-            raise HTTPException(status_code=500, detail="There was an error:"+str(e))
-    else:
-        return {"Image not valid"}
+        collection.insert_one({
+            "image_name": "image1", 
+            "embedding": embedding
+            })
+
+        return {
+            "message": "Face embedding stored successfully",
+            "embedding": embedding
+        }
+    
+    except Exception as e:
+        raise HTTPException(status_code=500, detail="There was an error:"+str(e))
+
