@@ -17,6 +17,7 @@ from tempfile import NamedTemporaryFile
 import logging
 from deepface.modules import verification
 from io import BytesIO
+import settings
 
 logging.basicConfig(level=logging.DEBUG)
 logger = logging.getLogger(__name__)
@@ -26,11 +27,14 @@ app = FastAPI()
 UPLOAD_DIR = "uploaded_images"
 os.makedirs(UPLOAD_DIR, exist_ok=True)
 
-origins = ["http://localhost:3000"]
+origins = ["http://localhost:8000"]
 
-client = MongoClient("mongodb://localhost:27017/")
+client = MongoClient(settings.mongoUri)
 db = client['facial_recognition']
 collection = db['images']
+
+class NumpyArrayPayload(BaseModel):
+    array: list
 
 app.add_middleware(
     CORSMiddleware,
@@ -140,7 +144,35 @@ async def verifyface(file:UploadFile = File(...)):
         raise HTTPException(status_code=400, detail=f"Something went wrong: {str(e)}")
 
 
+@app.post("/verifyfacelocal")
+async def verifyfacelocal(data: NumpyArrayPayload):
 
+    npArray = np.array(data.array)
+
+    image1_path = "./face_image.jpg"
+
+
+    try:
+        try:
+            face = DeepFace.detectFace(npArray, detector_backend='opencv')
+        except Exception as e:
+            return {"message": "No face detected"}
+        
+
+        if DeepFace.verify(npArray, image1_path,threshold=0.45)['verified']:
+            return {"message":"This is the same dude"}
+        else: 
+            return{"message":"this is not the same dude"}
+        
+
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=f"Something went wrong: {str(e)}")
+
+
+@app.get("/test")
+async def test(testData: str):
+    print("working")
+    return {"received_data": testData}
 
 
 def euclidean(embedding1, embedding2):
