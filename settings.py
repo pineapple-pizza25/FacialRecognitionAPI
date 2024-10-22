@@ -1,4 +1,4 @@
 import os
 
-mongoUri = os.environ.get("ATLAS_CON_STRING")
+mongoUri = os.environ.get("MongoConString")
 port = 3000

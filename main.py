@@ -18,6 +18,11 @@ import logging
 from deepface.modules import verification
 from io import BytesIO
 import settings
+import cv2
+from fastapi.encoders import jsonable_encoder
+import json
+import base64
+
 
 logging.basicConfig(level=logging.DEBUG)
 logger = logging.getLogger(__name__)
@@ -29,7 +34,7 @@ os.makedirs(UPLOAD_DIR, exist_ok=True)
 
 origins = ["http://localhost:8000"]
 
-client = MongoClient(settings.mongoUri)
+client = MongoClient('mongodb+srv://st10066487:debtduty96@apds.sw61z.mongodb.net/?retryWrites=true&w=majority&appName=APDS')
 db = client['facial_recognition']
 collection = db['images']
 
@@ -44,135 +49,84 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-
-@app.get("/")
-def getImage():
-    return {"Welcome"}
-
 @app.post("/storeface")
 async def storeFace(file:UploadFile = File(...)):
     
     raw_file = await file.read()
     image = file_to_image(raw_file)
-    npArray = pil_to_numpy(image)
 
     try:
-        embedding = DeepFace.represent(npArray, model_name="Facenet")
-
-        collection.insert_one({
-            "image_name": "image1", 
-            "embedding": embedding
-            })
+        base64_image = base64.b64encode(raw_file).decode("utf-8")
+        image_document = {
+            "name": "image1",
+            "data": base64_image
+        }
+        collection.insert_one(image_document)
+        print(f"Image stored in MongoDB.")
 
         return {
             "message": "Face embedding stored successfully",
-            "embedding": embedding
+            "embedding": base64_image
         }
     
     except Exception as e:
         raise HTTPException(status_code=500, detail="There was an error:"+str(e))
 
 
-@app.post("/facialrecognition")
-async def facialrecognition(file: UploadFile = File(...)):
+#verifies uploaded image against images stored in db
+@app.post("/facialrecognition1")
+async def facialrecognition1(file: UploadFile = File(...)):
+    #converts image to a numpy array
     raw_file = await file.read()
     image = file_to_image(raw_file)
     npArray = pil_to_numpy(image)
-    embedding = DeepFace.represent(npArray, model_name="Facenet")[0]['embedding']
-    
 
-    stored_faces = list(collection.find({}, {"embedding": 1, "_id": 0}))
+
+    #retrieves the stored images from the database
+    stored_faces = list(collection.find({}, {"data": 1, "_id": 0}))
     if not stored_faces:
         raise HTTPException(status_code=404, detail="No stored faces found in the database")
     
     for stored_face in stored_faces:
 
         try:
-            
-            stored_embedding = list(stored_face['embedding'])
+            base64_string  = stored_face["data"]
 
-            embedding_array = np.array(stored_embedding)
-            
-            distance = euclidean(embedding, embedding_array)
-            threshold = 0.6
-        
+            base64_data = base64_string.split(",")[1] if "," in base64_string else base64_string
+            image_data = base64.b64decode(base64_data)
+            imageFromMongo = Image.open(BytesIO(image_data))
+            image_np = np.array(imageFromMongo)
+
             try:
-                if distance < threshold:
-                    return {"message": "This is a match!"}
+                if DeepFace.verify(npArray, image_np, model_name='Facenet', threshold=0.45)['verified']:
+                    return {"message":"This dude is in the system"}
                 else: 
-                    continue
+                    return{"message":"This dude is not in the system"}
             
             except Exception as e:
                 return{f"There was an error with the verify function: {str(e)}"}
 
         except Exception as e:
             return{f"There was an error:: {str(e)}"}
-            continue
-
 
     return {"message": "No matching face found in the database"}
 
     
+    
 
 
 
-
-@app.post("/verifyface")
-async def verifyface(file:UploadFile = File(...)):
-
-    raw_file = await file.read()
-    image = file_to_image(raw_file)
-    npArray = pil_to_numpy(image)
-
-    image1_path = "./face_image.jpg"
-
-
-    try:
-        try:
-            face = DeepFace.detectFace(npArray, detector_backend='opencv')
-        except Exception as e:
-            return {"message": "No face detected"}
-        
-
-        if DeepFace.verify(npArray, image1_path,threshold=0.45)['verified']:
-            return {"message":"This is the same dude"}
-        else: 
-            return{"message":"this is not the same dude"}
-        
-
-    except Exception as e:
-        raise HTTPException(status_code=400, detail=f"Something went wrong: {str(e)}")
+#gets all embeddings from mongo
+@app.get("/getImages")
+async def getImages():
+    faces = []
+    
+    for x in collection.find():
+        faces.append(x)
+    return jsonable_encoder(str(faces))
 
 
-@app.post("/verifyfacelocal")
-async def verifyfacelocal(data: NumpyArrayPayload):
 
-    npArray = np.array(data.array)
-
-    image1_path = "./face_image.jpg"
-
-
-    try:
-        try:
-            face = DeepFace.detectFace(npArray, detector_backend='opencv')
-        except Exception as e:
-            return {"message": "No face detected"}
-        
-
-        if DeepFace.verify(npArray, image1_path,threshold=0.45)['verified']:
-            return {"message":"This is the same dude"}
-        else: 
-            return{"message":"this is not the same dude"}
-        
-
-    except Exception as e:
-        raise HTTPException(status_code=400, detail=f"Something went wrong: {str(e)}")
-
-
-@app.get("/test")
-async def test(testData: str):
-    print("working")
-    return {"received_data": testData}
 
 
 def euclidean(embedding1, embedding2):
@@ -229,7 +183,7 @@ def extract_embedding(embeddings):
         raise ValueError(f"Unexpected embedding type: {type(embedding)}")
     
 
-
+#converts the image binaries to a numpy array
 def dict_to_numpy(image_dict):
     # Assuming 'image' key contains binary data
     image_data = image_dict.get('image')
