@@ -79,6 +79,8 @@ async def facialrecognition(file: UploadFile = File(...)):
     if not stored_faces:
         raise HTTPException(status_code=404, detail="No stored faces found in the database")
     
+    face_identified = False
+    
     for stored_face in stored_faces:
 
         try:
@@ -100,17 +102,18 @@ async def facialrecognition(file: UploadFile = File(...)):
 
             try:
                 if DeepFace.verify(npArray, image_np, model_name='Facenet', threshold=0.45)['verified']:
-                    return {"message":"This dude is in the system"}
-                else: 
-                    return{"message":"This dude is not in the system"}
+                    face_identified = True
             
             except Exception as e:
                 return{f"There was an error with the verify function: {str(e)}"}
 
         except Exception as e:
             return{f"There was an error:: {str(e)}"}
-
-    return {"message": "No matching face found in the database"}
+        
+    if face_identified == True:
+        return("This dude is in the system")
+    else:
+        return("this dude is not in the system")
 
     
     
