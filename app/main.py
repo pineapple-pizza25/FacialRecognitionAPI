@@ -5,23 +5,15 @@ import numpy as np
 from fastapi.middleware.cors import CORSMiddleware
 from deepface import DeepFace
 import os
-from motor.motor_asyncio import AsyncIOMotorClient
 from pymongo import MongoClient
-import bson.binary
-import PIL
-from PIL import Image, ImageDraw, ImageFont
-import io
+from PIL import Image
 import numpy as np
-import tensorflow as tf
-from tempfile import NamedTemporaryFile
 import logging
-from deepface.modules import verification
 from io import BytesIO
-import settings
 import cv2
 from fastapi.encoders import jsonable_encoder
-import json
 import base64
+from .settings import mongoUri, port
 
 
 logging.basicConfig(level=logging.DEBUG)
@@ -34,9 +26,9 @@ os.makedirs(UPLOAD_DIR, exist_ok=True)
 
 origins = ["http://localhost:8000"]
 
-client = MongoClient('mongodb+srv://st10066487:debtduty96@apds.sw61z.mongodb.net/?retryWrites=true&w=majority&appName=APDS')
+client = MongoClient(mongoUri)
 db = client['facial_recognition']
-collection = db['images']
+collection = db['Students']
 
 class NumpyArrayPayload(BaseModel):
     array: list
@@ -59,7 +51,7 @@ async def storeFace(file:UploadFile = File(...)):
         base64_image = base64.b64encode(raw_file).decode("utf-8")
         image_document = {
             "name": "image1",
-            "data": base64_image
+            "image": base64_image
         }
         collection.insert_one(image_document)
         print(f"Image stored in MongoDB.")
@@ -74,8 +66,8 @@ async def storeFace(file:UploadFile = File(...)):
 
 
 #verifies uploaded image against images stored in db
-@app.post("/facialrecognition1")
-async def facialrecognition1(file: UploadFile = File(...)):
+@app.post("/facialrecognition")
+async def facialrecognition(file: UploadFile = File(...)):
     #converts image to a numpy array
     raw_file = await file.read()
     image = file_to_image(raw_file)
@@ -83,14 +75,23 @@ async def facialrecognition1(file: UploadFile = File(...)):
 
 
     #retrieves the stored images from the database
-    stored_faces = list(collection.find({}, {"data": 1, "_id": 0}))
+    stored_faces = list(collection.find({}, {"image": 1, "_id": 0}))
     if not stored_faces:
         raise HTTPException(status_code=404, detail="No stored faces found in the database")
     
     for stored_face in stored_faces:
 
         try:
-            base64_string  = stored_face["data"]
+
+            if not stored_face or "image" not in stored_face:
+                print("Skipping stored_face due to missing 'image' key or None value.")
+                continue
+    
+            base64_string  = stored_face["image"]
+
+            if base64_string is None:
+                print("Skipping stored_face due to none value in image.")
+                continue
 
             base64_data = base64_string.split(",")[1] if "," in base64_string else base64_string
             image_data = base64.b64decode(base64_data)
@@ -185,7 +186,6 @@ def extract_embedding(embeddings):
 
 #converts the image binaries to a numpy array
 def dict_to_numpy(image_dict):
-    # Assuming 'image' key contains binary data
     image_data = image_dict.get('image')
     
     if image_data:
