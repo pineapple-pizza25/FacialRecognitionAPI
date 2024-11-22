@@ -50,7 +50,7 @@ def current_time_to_nanoseconds():
     # Calculate seconds since midnight
     seconds_since_midnight = now.hour * 3600 + now.minute * 60 + now.second
     # Convert to nanoseconds
-    return seconds_since_midnight * 1_000_000_000
+    return seconds_since_midnight * 10_000_000
 
 def getFormattedDate():
     """
@@ -66,7 +66,7 @@ def getFormattedDate():
     return midnight_date
 
 def getStudentsInLesson():
-    collection = db['Students']
+    collection = db['Lessons']
 
     specified_date =  getFormattedDate()
     specified_time = current_time_to_nanoseconds()
@@ -89,9 +89,9 @@ def getStudentsInLesson():
 
     test_query = {"lessonDate": specified_date}
 
-    result = collection.find_one(test_query)
+    result = collection.find_one(query, projection)
 
-    print("Query:", test_query)
+    print("Query:", query)
 
     if result:
         print(result)
