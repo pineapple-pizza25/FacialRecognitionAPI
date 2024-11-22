@@ -14,6 +14,8 @@ import cv2
 from fastapi.encoders import jsonable_encoder
 import base64
 from .settings import mongoUri, port
+from datetime import datetime, timezone, timedelta
+import pytz
 
 
 logging.basicConfig(level=logging.DEBUG)
@@ -29,6 +31,7 @@ origins = ["http://localhost:8000"]
 client = MongoClient(mongoUri)
 db = client['facial_recognition']
 collection = db['Students']
+attendanceCollection = db['Attendance']
 
 class NumpyArrayPayload(BaseModel):
     array: list
@@ -40,6 +43,65 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+def current_time_to_nanoseconds():
+    # Get current time
+    now = datetime.now()
+    # Calculate seconds since midnight
+    seconds_since_midnight = now.hour * 3600 + now.minute * 60 + now.second
+    # Convert to nanoseconds
+    return seconds_since_midnight * 1_000_000_000
+
+def getFormattedDate():
+    """
+    Returns the current date as a datetime object set to midnight UTC
+    """
+    current_date = datetime.now(pytz.utc) 
+    midnight_date = current_date.replace(
+        hour=0,
+        minute=0,
+        second=0,
+        microsecond=0
+    )
+    return midnight_date
+
+def getStudentsInLesson():
+    collection = db['Students']
+
+    specified_date =  getFormattedDate()
+    specified_time = current_time_to_nanoseconds()
+
+    print(specified_date)
+    print(specified_time)
+
+    start_of_day = specified_date
+    end_of_day = specified_date + timedelta(days=1)
+
+    projection = {"_id": 0, "Students": 1}
+
+    query = {
+        "lessonDate": specified_date,
+        "$and": [
+            {"startTime": {"$lte": specified_time}},
+            {"endTime": {"$gte": specified_time}}
+        ]
+    }
+
+    test_query = {"lessonDate": specified_date}
+
+    result = collection.find_one(test_query)
+
+    print("Query:", test_query)
+
+    if result:
+        print(result)
+    else:
+        print("No matching document found.")
+
+@app.get("/getStudents")
+async def getStudents():
+    getStudentsInLesson()
+
 
 @app.post("/storeface")
 async def storeFace(file:UploadFile = File(...)):
@@ -75,11 +137,12 @@ async def facialrecognition(file: UploadFile = File(...)):
 
 
     #retrieves the stored images from the database
-    stored_faces = list(collection.find({}, {"image": 1, "_id": 0}))
+    stored_faces = list(collection.find({}, {"image": 1, "_id": 1}))
     if not stored_faces:
         raise HTTPException(status_code=404, detail="No stored faces found in the database")
     
     face_identified = False
+    student_id = None
     
     for stored_face in stored_faces:
 
@@ -103,6 +166,7 @@ async def facialrecognition(file: UploadFile = File(...)):
             try:
                 if DeepFace.verify(npArray, image_np, model_name='Facenet', threshold=0.45)['verified']:
                     face_identified = True
+                    student_id = stored_face["_id"]
             
             except Exception as e:
                 return{f"There was an error with the verify function: {str(e)}"}
@@ -111,6 +175,10 @@ async def facialrecognition(file: UploadFile = File(...)):
             return{f"There was an error:: {str(e)}"}
         
     if face_identified == True:
+        attendanceCollection.insert_one({
+            "lesson_id": "L001",
+            "student_id": student_id
+        })
         return("This dude is in the system")
     else:
         return("this dude is not in the system")
