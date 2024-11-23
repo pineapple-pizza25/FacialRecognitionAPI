@@ -195,6 +195,7 @@ async def facialrecognition(file: UploadFile = File(...)):
                 if DeepFace.verify(npArray, image_np, model_name='Facenet', threshold=0.45)['verified']:
                     face_identified = True
                     student_id = stored_face["_id"]
+                    break
             
             except Exception as e:
                 return{f"There was an error with the verify function: {str(e)}"}
