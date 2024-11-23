@@ -183,7 +183,7 @@ async def facialrecognition(file: UploadFile = File(...)):
     for lessonStudent in lessonStudents:
 
         try:
-            student = collection.find_one({"_id": lessonStudents["_id"]})
+            student = collection.find_one({"_id": lessonStudent})
             if not student or "image" not in student:
                 print("Skipping stored_face due to missing 'image' key or None value.")
                 continue
