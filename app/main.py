@@ -158,6 +158,14 @@ async def storeFace(file:UploadFile = File(...)):
 #verifies uploaded image against images stored in db
 @app.post("/facialrecognition")
 async def facialrecognition(file: UploadFile = File(...)):
+    lessonId = getLesson()
+    if not lessonId:
+        return {"message": "No active lesson found"}
+
+    lessonStudents = getStudentsInLesson(lessonId)
+    if not lessonStudents:
+        return {"message": "No students found in current lesson"}
+
     #converts image to a numpy array
     raw_file = await file.read()
     image = file_to_image(raw_file)
@@ -172,15 +180,15 @@ async def facialrecognition(file: UploadFile = File(...)):
     face_identified = False
     student_id = None
     
-    for stored_face in stored_faces:
+    for lessonStudent in lessonStudents:
 
         try:
-
-            if not stored_face or "image" not in stored_face:
+            student = collection.find_one({"_id": lessonStudents["_id"]})
+            if not student or "image" not in student:
                 print("Skipping stored_face due to missing 'image' key or None value.")
                 continue
     
-            base64_string  = stored_face["image"]
+            base64_string  = student["image"]
 
             if base64_string is None:
                 print("Skipping stored_face due to none value in image.")
@@ -194,7 +202,7 @@ async def facialrecognition(file: UploadFile = File(...)):
             try:
                 if DeepFace.verify(npArray, image_np, model_name='Facenet', threshold=0.45)['verified']:
                     face_identified = True
-                    student_id = stored_face["_id"]
+                    student_id = student["_id"]
                     break
             
             except Exception as e:
@@ -204,7 +212,6 @@ async def facialrecognition(file: UploadFile = File(...)):
             return{f"There was an error:: {str(e)}"}
         
     if face_identified == True:
-        lessonId = getLesson()
         attendanceCollection.insert_one({
             "lessonId": lessonId,
             "studentId": student_id
