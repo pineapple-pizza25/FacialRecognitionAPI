@@ -65,7 +65,7 @@ def getFormattedDate():
     )
     return midnight_date
 
-def getStudentsInLesson():
+def getLesson():
     collection = db['Lessons']
 
     specified_date =  getFormattedDate()
@@ -77,7 +77,7 @@ def getStudentsInLesson():
     start_of_day = specified_date
     end_of_day = specified_date + timedelta(days=1)
 
-    projection = {"_id": 0, "Students": 1}
+    projection = {"_id": 1,}
 
     query = {
         "lessonDate": specified_date,
@@ -95,16 +95,44 @@ def getStudentsInLesson():
 
     if result:
         print(result)
+        return result.get('_id')
     else:
         print("No matching document found.")
+        return None
+
+
+def getStudentsInLesson(lesson_id):
+    collection = db['Lessons']
+    
+    query = {"_id": lesson_id}
+    
+    projection = {"_id": 0, "Students": 1} 
+    
+    result = collection.find_one(query, projection)
+    
+    if result:
+        return result.get('Students')  
+    else:
+        print(f"No lesson found with ID: {lesson_id}")
+        return None
+
 
 @app.get("/getStudents")
 async def getStudents():
-    getStudentsInLesson()
+    lessonId = getLesson()
+
+    if lessonId:
+        students = getStudentsInLesson(lessonId)
+        if students:
+         print(students)
+        else: print("no students in lesson")
+    else: print("no lesson id")
 
 
 @app.post("/storeface")
 async def storeFace(file:UploadFile = File(...)):
+
+    getLesson()
     
     raw_file = await file.read()
     image = file_to_image(raw_file)
@@ -175,9 +203,10 @@ async def facialrecognition(file: UploadFile = File(...)):
             return{f"There was an error:: {str(e)}"}
         
     if face_identified == True:
+        lessonId = getLesson()
         attendanceCollection.insert_one({
-            "lesson_id": "L001",
-            "student_id": student_id
+            "lessonId": lessonId,
+            "studentId": student_id
         })
         return("This dude is in the system")
     else:
