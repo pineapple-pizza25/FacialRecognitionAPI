@@ -212,10 +212,22 @@ async def facialrecognition(file: UploadFile = File(...)):
             return{f"There was an error:: {str(e)}"}
         
     if face_identified == True:
-        attendanceCollection.insert_one({
+        attendance_record = {
             "lessonId": lessonId,
-            "studentId": student_id
-        })
+            "timestamp": datetime.now(),
+            "status": "present"
+        }       
+
+        collection.update_one(
+            {"_id": student_id},
+            {
+                "$push": {
+                    "attendance": attendance_record
+                }
+            },
+            upsert=True  # Creates the attendance array if it doesn't exist
+        )
+        
         return("This dude is in the system")
     else:
         return("this dude is not in the system")
