@@ -219,13 +219,19 @@ async def facialrecognition(file: UploadFile = File(...)):
         }       
 
         collection.update_one(
-            {"_id": student_id},
             {
-                "$push": {
-                    "attendance": attendance_record
+                "_id": student_id,
+                "attendance": {
+                    "$elemMatch": {
+                        "lessonId": lessonId
+                    }
                 }
             },
-            upsert=True  # Creates the attendance array if it doesn't exist
+            {
+                "$set": {
+                    "attendance.$": attendance_record
+                }
+            }
         )
         
         return("This dude is in the system")
